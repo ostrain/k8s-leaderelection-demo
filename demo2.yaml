@@ -1,0 +1,65 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: k8s-leaderelection-demoapp
+  labels:
+    app: k8s-leaderelection-demoapp
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: k8s-leaderelection-demoapp
+    spec:
+      containers:
+       - name: leaderelector
+         image: gcr.io/google_containers/leader-elector:0.5
+         args:
+          - --election=demoapp
+          - --http=localhost:4040
+         ports:
+          - containerPort: 4040
+            protocol: TCP
+       - name: demoapp
+         image: owenstrain/k8s-leaderelection-demoapp:latest
+         env:
+          - name: POD_NAME
+            valueFrom:
+             fieldRef:
+              fieldPath: metadata.name
+         ports:
+          - containerPort: 8080
+            name: http
+            protocol: TCP
+         livenessProbe:
+           exec:
+             command:
+              - /bin/sh
+              - -c
+              - curl -v --silent http://localhost:8080/ 2>&1
+           initialDelaySeconds: 5
+           periodSeconds: 5
+         readinessProbe:
+           exec:
+             command:
+              - /bin/sh
+              - -c
+              - curl -v --silent http://localhost:4040/ 2>&1 | grep $HOSTNAME
+           initialDelaySeconds: 5
+           periodSeconds: 5
+
+---
+
+kind: Service 
+apiVersion: v1 
+metadata:
+  name: demoservice 
+spec:
+  type: NodePort
+  selector:
+    app: k8s-leaderelection-demoapp
+  ports:
+    - nodePort: 30000
+      port: 8080
+      targetPort: 8080
+
